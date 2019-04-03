@@ -59,7 +59,7 @@ class LeToRWrapper(Model):
 
         self.ranking_loss = ranking_loss
         if self.ranking_loss:
-            self.loss = nn.MarginRankingLoss(margin=0.5)
+            self.loss = nn.MarginRankingLoss(margin=1.0)
         else:
             self.loss = nn.CrossEntropyLoss()
         initializer(self)

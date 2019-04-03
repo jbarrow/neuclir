@@ -74,12 +74,28 @@ local query_encoder = {
   averaged: query_averaged
 };
 
-#local Pathify(relative_path) = '/storage3/proj/joe/neuclir/' + relative_path;
-#local Pathify(relative_path) = '/fs/clip-scratch/jdbarrow/neuclir/neuclir/' + relative_path;
-#local Pathify(relative_path) = '/storage2/proj/joe/neuclir/' + relative_path;
-local Pathify(relative_path) = '/home/joe/projects/neuclir/' + relative_path;
+local pathify(paths) = std.join('/', paths);
 
-{
+/*
+ * base: the base path for all the data
+ * random_seed:
+ * pytorch_seed:
+ * numpy_seed:
+ * use_scores:
+ *
+ */
+ # EXTERNAL VARIABLE LIST
+ # dan: bool,
+ # averaged: bool,
+ # num_filters: int,
+ # dropout: float,
+ # batch_size: int,
+ # clipping: float,
+ # lr: float,
+ # l2: float,
+ # dataset: str
+
+function(base, scorer, random_seed, pytorch_seed, numpy_seed) {
   random_seed: random_seed, pytorch_seed: pytorch_seed, numpy_seed: numpy_seed,
   dataset_reader: { type: 'paired_dataset_reader', scores: use_scores, lazy: false },
   validation_dataset_reader: {
