@@ -5,6 +5,7 @@ from typing import Optional
 from allennlp.modules.feedforward import FeedForward
 from allennlp.modules.seq2vec_encoders.seq2vec_encoder import Seq2VecEncoder
 from allennlp.modules.attention import Attention
+from allennlp.nn import Activation
 
 @Scorer.register("s2v_scorer")
 class Seq2VecScorer(Scorer):
@@ -52,7 +53,7 @@ class Seq2VecScorer(Scorer):
         if scorer is None:
             scorer = FeedForward(
                         input_dim=input_dim, num_layers=1,
-                        hidden_dims=1, activations=torch.nn.Tanh, dropout=0.)
+                        hidden_dims=1, activations=Activation.by_name('tanh')(), dropout=0.)
         self.scorer = scorer
         # assertions to ensure our shapes match our assumptions
         assert q_dim == d_dim
@@ -77,6 +78,6 @@ class Seq2VecScorer(Scorer):
         if self.use_encoded:
             reprs += [q, d]
 
-        encoded = torch.cat(reprs, dim=2)
+        encoded = torch.cat(reprs, dim=1)
 
-        return self.scorer(represented)
+        return self.scorer(encoded)

@@ -28,7 +28,6 @@ class LeToRWrapper(Model):
                  query_field_embedder: TextFieldEmbedder,
                  doc_field_embedder: TextFieldEmbedder,
                  scorer: Scorer,
-                 total_scorer: FeedForward,
                  validation_metrics: Dict[str, Metric],
                  ranking_loss: bool = False,
                  initializer: InitializerApplicator = InitializerApplicator(),
@@ -42,7 +41,6 @@ class LeToRWrapper(Model):
         self.idf_embedder = idf_embedder
 
         self.scorer = scorer
-        self.total_scorer = total_scorer
 
         self.initializer = initializer
         self.regularizer = regularizer
@@ -57,11 +55,12 @@ class LeToRWrapper(Model):
             False: validation_metrics.keys()
         }
 
-        self.ranking_loss = ranking_loss
-        if self.ranking_loss:
-            self.loss = nn.MarginRankingLoss(margin=1.0)
-        else:
-            self.loss = nn.CrossEntropyLoss()
+        # self.ranking_loss = ranking_loss
+        # if self.ranking_loss:
+        #     self.loss = nn.MarginRankingLoss(margin=1.0)
+        # else:
+        #     self.loss = nn.CrossEntropyLoss()
+        self.loss = nn.KLDivLoss()
         initializer(self)
 
     def get_metrics(self, reset: bool = False) -> Dict[str, float]:
@@ -86,7 +85,7 @@ class LeToRWrapper(Model):
         # (batch_size, num_docs, doc_length, transform_dim)
         batch_size, num_docs, doc_length, embedding_dim = ds_embedded.shape
         # (batch_size * num_docs, doc_length, transform_dim)
-        ds_transformed = ds_embedded.view(batch_size*num_docs, doc_length, embedding_dim)
+        ds_embedded = ds_embedded.view(batch_size*num_docs, doc_length, embedding_dim)
         ds_mask = ds_mask.view(batch_size*num_docs, doc_length)
 
         # (batch_size, query_length)
@@ -100,31 +99,25 @@ class LeToRWrapper(Model):
         # (batch_size, num_docs, query_length, embedding_dim)
         qs_embedded = qs_embedded.view(batch_size*num_docs, query_length, embedding_dim)
 
-        semantic_scores = self.scorer(qs_embedded, ds_embedded, qs_mask, ds_mask)
+        logits = self.scorer(qs_embedded, ds_embedded, qs_mask, ds_mask)
+        logits = F.log_softmax(logits.view(batch_size, num_docs),dim=1)
 
-        if scores is not None:
-            # (batch_size, num_docs, 2)
-            semantic_scores = torch.cat([semantic_scores, scores], dim=2)
+        output_dict = {'logits': logits, 'accuracy': 0.}
 
-        # (batch_size, num_docs)
-        logits = self.total_scorer(semantic_scores)
-        logits = logits.squeeze(2)
-
-        output_dict = {'logits': logits}
-
-        if labels is not None:
+        if labels is not None or scores is not None:
             # filter out to only the metrics we care about
-            if self.training:
-                if self.ranking_loss:
-                    loss = self.loss(logits[:, 0], logits[:, 1], labels.float()*-2.+1.)
-                else:
-                    loss = self.loss(logits, labels.squeeze(-1).long())
-                self.metrics['accuracy'](logits, labels.squeeze(-1))
-            else:
-               # at validation time, we can't compute a proper loss
-               loss = torch.Tensor([0.])
-               for metric in self.training_metrics[False]:
-                   self.metrics[metric](logits, labels.squeeze(-1).long(), ls_mask, relevant_ignored, irrelevant_ignored)
-            output_dict["loss"] = loss
+            # if self.training:
+            #     if self.ranking_loss:
+            #         loss = self.loss(logits[:, 0], logits[:, 1], labels.float()*-2.+1.)
+            #     else:
+            #         loss = self.loss(logits, labels.squeeze(-1).long())
+
+            #self.metrics['accuracy'](logits, labels.squeeze(-1))
+            # else:
+            #    # at validation time, we can't compute a proper loss
+            #    loss = torch.Tensor([0.])
+            #    for metric in self.training_metrics[False]:
+            #        self.metrics[metric](logits, labels.squeeze(-1).long(), ls_mask, relevant_ignored, irrelevant_ignored)
+            output_dict['loss'] = self.loss(logits, scores)
 
         return output_dict
