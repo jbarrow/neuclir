@@ -15,7 +15,7 @@ from allennlp.modules.seq2vec_encoders.seq2vec_encoder import Seq2VecEncoder
 from allennlp.modules.seq2vec_encoders.boe_encoder import BagOfEmbeddingsEncoder
 from allennlp.training.metrics.metric import Metric
 
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List
 from ..metrics import AQWV
 from .scorers import Scorer
 
@@ -71,11 +71,11 @@ class LeToRWrapper(Model):
     def forward(self,
                 query: Dict[str, torch.LongTensor],
                 docs: Dict[str, torch.LongTensor],
+                dataset: List[str] = [],
                 labels: Optional[Dict[str, torch.LongTensor]] = None,
                 scores: Optional[Dict[str, torch.Tensor]] = None,
                 relevant_ignored: Optional[torch.Tensor] = None,
                 irrelevant_ignored: Optional[torch.Tensor] = None) -> Dict[str, torch.Tensor]:
-
         # label masks
         ls_mask = get_text_field_mask(docs)
         # (batch_size, num_docs, doc_length)

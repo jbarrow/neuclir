@@ -14,7 +14,6 @@ class DatasetMingler(Registrable):
     def mingle(self, datasets: Dict[str, Iterable[Instance]]) -> Iterable[Instance]:
         raise NotImplementedError
 
-
 @DatasetMingler.register("round-robin")
 class RoundRobinMingler(DatasetMingler):
     """
@@ -26,7 +25,7 @@ class RoundRobinMingler(DatasetMingler):
         self.dataset_name_field = dataset_name_field
         self.take_at_a_time = take_at_a_time
 
-    def mingle(self, datasets: Dict[str, Iterable[Instance]]) -> Iterable[Instance]:
+    def mingle(self, datasets: Iterable[Instance]) -> Iterable[Instance]:
         iterators = {name: iter(dataset) for name, dataset in datasets.items()}
         done: Set[str] = set()
 
