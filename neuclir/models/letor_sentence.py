@@ -21,8 +21,8 @@ from .scorers import Scorer
 
 from allennlp.modules.attention.cosine_attention import CosineAttention
 
-@Model.register('letor_training')
-class LeToRWrapper(Model):
+@Model.register('letor_sentence_training')
+class LeToRSentenceWrapper(Model):
     def __init__(self,
                  vocab: Vocabulary,
                  doc_field_embedder: TextFieldEmbedder,
@@ -36,7 +36,7 @@ class LeToRWrapper(Model):
                  regularizer: Optional[RegularizerApplicator] = None,
                  idf_embedder: Optional[TextFieldEmbedder] = None,
                  dropout: Optional[float] = 0.) -> None:
-        super(LeToRWrapper, self).__init__(vocab, regularizer)
+        super(LeToRSentenceWrapper, self).__init__(vocab, regularizer)
 
         self.query_field_embedder = query_field_embedder
         if self.query_field_embedder is None:
@@ -46,10 +46,8 @@ class LeToRWrapper(Model):
         self.idf_embedder = idf_embedder
 
         self.scorer = scorer
-
         self.initializer = initializer
         self.regularizer = regularizer
-        self.accuracy = CategoricalAccuracy()
 
         self.metrics = copy.deepcopy(validation_metrics)
         self.metrics.update({
@@ -79,13 +77,13 @@ class LeToRWrapper(Model):
         p = F.log_softmax(y / self.temperature, dim=1)
         q = F.softmax(teacher_scores / self.temperature, dim=1)
 
-        if not self.training:
-            print('TARGET:', q)
-            print('INPUTS:', y)
-            print('OUTPUT:', p)
+        # if not self.training:
+        #     print('TARGET:', q)
+        #     print('INPUTS:', y)
+        #     print('LABELS:', labels)
 
         l_kl = self.kl_loss(p, q) * self.temperature * self.temperature
-        l_ce = 1.
+        l_ce = 0.
         if labels is not None:
            l_ce = self.classification_loss(y, labels)
 
@@ -105,17 +103,16 @@ class LeToRWrapper(Model):
                 scores: Optional[Dict[str, torch.Tensor]] = None,
                 relevant_ignored: Optional[torch.Tensor] = None,
                 irrelevant_ignored: Optional[torch.Tensor] = None) -> Dict[str, torch.Tensor]:
-        # label masks
-        ls_mask = get_text_field_mask(docs)
-        # (batch_size, num_docs, doc_length)
+        # (batch_size, num_docs, num_sentences, sentence_length)
         ds_mask = get_text_field_mask(docs, num_wrapping_dims=1)
-        # (batch_size, num_docs, doc_length, embedding_dim)
+        ss_mask = get_text_field_mask(docs, num_wrapping_dims=2)
+        # (batch_size, num_docs, num_sentences, sentence_length, embedding_dim)
         ds_embedded = self.doc_field_embedder(docs)
-        # (batch_size, num_docs, doc_length, transform_dim)
-        batch_size, num_docs, doc_length, embedding_dim = ds_embedded.shape
-        # (batch_size * num_docs, doc_length, transform_dim)
-        ds_embedded = ds_embedded.view(batch_size*num_docs, doc_length, embedding_dim)
-        ds_mask = ds_mask.view(batch_size*num_docs, doc_length)
+        batch_size, num_docs, num_sentences, sentence_length, embedding_dim = ds_embedded.shape
+        # (batch_size * num_docs, num_sentences, sentence_length, embedding_dim)
+        ds_embedded = ds_embedded.view(batch_size*num_docs, num_sentences, sentence_length, embedding_dim)
+        ds_mask = ds_mask.view(batch_size*num_docs, num_sentences)
+        ss_mask = ss_mask.view(batch_size*num_docs, num_sentences, sentence_length)
 
         # (batch_size, query_length)
         qs_mask = get_text_field_mask(query)
@@ -128,29 +125,15 @@ class LeToRWrapper(Model):
         # (batch_size * num_docs, query_length, embedding_dim)
         qs_embedded = qs_embedded.view(batch_size*num_docs, query_length, embedding_dim)
 
-        logits = self.scorer(qs_embedded, ds_embedded, qs_mask, ds_mask).view(batch_size, num_docs)
-        #logits = F.log_softmax(logits,dim=1)
+        logits = self.scorer(qs_embedded, ds_embedded, qs_mask, ss_mask, ds_mask).view(batch_size, num_docs)
+
         output_dict = {'logits': logits}
 
         if scores is not None:
-            # filter out to only the metrics we care about
-            # if self.training:
-            #     if self.ranking_loss:
-            #         loss = self.loss(logits[:, 0], logits[:, 1], labels.float()*-2.+1.)
-            #     else:
-            #         loss = self.loss(logits, labels.squeeze(-1).long())
-
-            #self.metrics['accuracy'](logits, labels.squeeze(-1))
-            # else:
-            #    # at validation time, we can't compute a proper loss
-            #    loss = torch.Tensor([0.])
-            #    for metric in self.training_metrics[False]:
-            #        self.metrics[metric](logits, labels.squeeze(-1).long(), ls_mask, relevant_ignored, irrelevant_ignored)
             output_dict['loss'] = self.distillation_loss(logits, scores, labels)
 
         if labels is not None:
             sfl = F.log_softmax(logits,dim=1)
-            #print(sfl)
             output_dict['accuracy'] = self.metrics['accuracy'](sfl, labels)
 
         return output_dict

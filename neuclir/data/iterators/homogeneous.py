@@ -21,7 +21,6 @@ class HomogeneousBatchIterator(DataIterator):
     def __init__(self,
                  type_field_name: str = "dataset",
                  allow_mixed_batches: bool = False,
-                 mingler: DatasetMingler = None,
                  batch_size: int = 32) -> None:
         super().__init__(batch_size)
         self.type_field_name = type_field_name

@@ -12,23 +12,25 @@ import numpy as np
 import json
 
 
-@DatasetReader.register('distillation_reader')
+@DatasetReader.register('distillation_sentence_reader')
 class DistillationDatasetReader(DatasetReader):
     def __init__(self,
                  dataset_name_field: str = 'dataset',
                  query_token_indexers: Dict[str, TokenIndexer] = None,
                  doc_token_indexers: Dict[str, TokenIndexer] = None,
+                 sentence_token: str = '</s>',
                  lazy: bool = False) -> None:
         super().__init__(lazy=lazy)
         self.dataset_name_field = dataset_name_field
         self.q_token_indexers = query_token_indexers or {'tokens': SingleIdTokenIndexer()}
         self.d_token_indexers = doc_token_indexers or {'tokens': SingleIdTokenIndexer()}
+        self.sentence_token = sentence_token
 
-    def line_to_instance(self, query: List[Token], docs: List[List[Token]],
+    def line_to_instance(self, query: List[Token], docs: List[List[List[Token]]],
                          relevant_ix: int = None, scores: List[float] = None,
                          dataset: Optional[str] = None) -> Instance:
         query_field = TextField(query, self.q_token_indexers)
-        doc_fields = [TextField(doc, self.d_token_indexers) for doc in docs]
+        doc_fields = [ListField([TextField(sentence, self.d_token_indexers) for sentence in doc]) for doc in docs]
 
         fields = {
             'query': query_field,
@@ -55,10 +57,10 @@ class DistillationDatasetReader(DatasetReader):
                 dataset = None
                 if self.dataset_name_field in line:
                     dataset = line[self.dataset_name_field]
-                docs = line.get('docs', line.get('documents'))
+                docs = [d.split(self.sentence_token) for d in line.get('docs', line.get('documents'))]
                 instance = self.line_to_instance(
                     tokenize(line['query']),
-                    [tokenize(d) for d in docs],
+                    [[tokenize(s.strip()) for s in sentences] for sentences in docs],
                     scores = np.array(line['scores']),
                     relevant_ix=line.get('relevant_ix', None),
                     dataset=dataset

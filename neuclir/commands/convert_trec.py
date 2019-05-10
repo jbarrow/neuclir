@@ -27,8 +27,15 @@ def _convert(args: argparse.Namespace) -> None:
     output_type = 'file'
     if os.path.isdir(args.output):
         output_type = 'dir'
+    else:
+        fp = open(args.output, 'w')
+        fp.close()
 
-    for file in [args.input, args.corrections]:
+    files = [args.input]
+    if args.corrections != '':
+        files.append(args.corrections)
+
+    for file in files:
         with open(file) as fp:
             for line in fp:
                 query = json.loads(line)

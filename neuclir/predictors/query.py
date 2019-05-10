@@ -7,6 +7,7 @@ from ..models import *
 from ..readers.utils import tokenize
 
 import torch.nn.functional as F
+import numpy as np
 import torch
 import json
 
@@ -16,7 +17,7 @@ epsilon = 1e-6
 @Predictor.register('query_predictor')
 class QueryPredictor(Predictor):
     def predict_json(self, inputs: JsonDict) -> JsonDict:
-        doc_ids = [d['document_id'] for d in inputs['docs']]
+        doc_ids = [d for d in inputs['document_ids']]
         # run the model forward
         instance = self._json_to_instance(inputs)
         # print(list(F.log_softmax(torch.tensor(self.predict_instance(instance)['logits']),dim=0)))
@@ -31,9 +32,11 @@ class QueryPredictor(Predictor):
         }
 
     def _json_to_instance(self, json_dict: JsonDict) -> Instance:
+        docs = [d.split('</s>') for d in json_dict['documents']]
         return self._dataset_reader.line_to_instance(
             tokenize(json_dict['query']),
-            [(tokenize(d['text']), float(d['scores'][0]['score']), 0) for d in json_dict['docs']]
+            [[tokenize(s.strip()) for s in sentences] for sentences in docs],
+            scores=np.array(json_dict['scores'])
         )
 
     def predict_batch_json(self, inputs: List[JsonDict]) -> List[JsonDict]:

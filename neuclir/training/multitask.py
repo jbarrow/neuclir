@@ -8,25 +8,46 @@ from allennlp.data.dataset_readers import DatasetReader
 from allennlp.common.params import Params
 from allennlp.models import Model
 from allennlp.data.vocabulary import Vocabulary
-from allennlp.data.fields import MetadataField
 from allennlp.common.util import (dump_metrics, gpu_memory_mb, peak_memory_mb,
                                   get_frozen_and_tunable_parameter_names, lazy_groups_of)
+from allennlp.common.checks import ConfigurationError
 
 from typing import List, Dict, Iterable, Any, Set, Optional, NamedTuple
 
+import itertools
 import logging
 import torch
 import tqdm
 import os
 
 logger = logging.getLogger(__name__)
+#
+# def flatten_datasets(datasets: Dict[str, Iterable[Instance]],
+#                      dataset_name_field: Optional[str] = 'dataset') -> Iterable[Instance]:
+#     for name, iterator in datasets.items():
+#         for instance in iterator:
+#             instance.fields[dataset_name_field] = MetadataField(name)
+#             yield instance
 
-def flatten_datasets(datasets: Dict[str, Iterable[Instance]],
-                     dataset_name_field: Optional[str] = 'dataset') -> Iterable[Instance]:
-    for name, iterator in datasets.items():
-        for instance in iterator:
-            instance.fields[dataset_name_field] = MetadataField(name)
-            yield instance
+def bad_chain(a: Iterable[Any], b: Iterable[Any]) -> Iterable[Any]:
+    a_prime = itertools.tee(a)
+    b_prime = itertools.tee(b)
+    for i in a_prime:
+        yield i
+    for i in b_prime:
+        yield i
+
+def load_datasets(data_paths: Dict[str, str], readers: Dict[str, DatasetReader]) -> Iterable[Instance]:
+    data: Iterable[Instance] = []
+
+    for name, data_path in data_paths.items():
+        logger.info("Reading training data from %s", data_path)
+        if name not in readers:
+            raise ConfigurationError(f"Dataset reader {name} not found in readers")
+        data.extend(readers[name].read(data_path))
+
+    return data
+
 
 def multitask_datasets_from_params(params: Params) -> Dict[str, Iterable[Instance]]:
     """
@@ -42,33 +63,15 @@ def multitask_datasets_from_params(params: Params) -> Dict[str, Iterable[Instanc
     validation_data_paths = params.pop('validation_data_paths', None)
     test_data_paths = params.pop("test_data_paths", None)
 
-    train_data: Dict[str, Iterable[Instance]] = {}
-    for name, train_data_path in train_data_paths.items():
-        logger.info("Reading training data from %s", train_data_path)
-        if name not in readers:
-            raise ConfigurationError(f"Dataset reader {name} not found in readers")
-        train_data[name] = readers[name].read(train_data_path)
     datasets: Dict[str, Iterable[Instance]] = {
-        "train": list(flatten_datasets(train_data))
+        "train": load_datasets(train_data_paths, readers)
     }
 
     if validation_data_paths is not None:
-        validation_data: Dict[str, Iterable[Instance]] = {}
-        for name, validation_data_path in validation_data_paths.items():
-            logger.info("Reading validation data from %s", validation_data_path)
-            if name not in readers:
-                raise ConfigurationError(f"Dataset reader {name} not found in readers")
-            validation_data[name] = readers[name].read(validation_data_path)
-        datasets["validation"] = flatten_datasets(validation_data)
+        datasets["validation"] = load_datasets(validation_data_paths, readers)
 
     if test_data_paths is not None:
-        test_data: Dict[str, Iterable[Instance]] = {}
-        for name, test_data_path in test_data_paths.items():
-            logger.info("Reading test data from %s", test_data_path)
-            if name not in readers:
-                raise ConfigurationError(f"Dataset reader {name} not found in readers")
-            test_data[name] = readers[name].read(test_data_path)
-        datasets["test"] = flatten_datasets(test_data)
+        datasets["test"] = load_datasets(test_data_paths, readers)
 
     return datasets
 
@@ -131,7 +134,7 @@ class MultiTaskTrainerPieces(NamedTuple):
         else:
             validation_iterator = None
 
-        train_data = list(all_datasets['train'])
+        train_data = all_datasets['train']
         validation_data = all_datasets.get('validation')
         test_data = all_datasets.get('test')
 
@@ -162,7 +165,7 @@ class MultiTaskTrainer(Trainer):
                     serialization_dir: str,
                     recover: bool = False) -> 'MultiTaskTrainer':
         pieces = MultiTaskTrainerPieces.from_params(params, serialization_dir, recover)  # pylint: disable=no-member
-        print(len(list(pieces.train_dataset)))
+
         base = Trainer.from_params(model=pieces.model,
                                    serialization_dir=serialization_dir,
                                    iterator=pieces.iterator,
@@ -171,92 +174,5 @@ class MultiTaskTrainer(Trainer):
                                    params=pieces.params,
                                    validation_iterator=pieces.validation_iterator)
         base.__class__ = MultiTaskTrainer
+
         return base
-
-    """
-    A simple trainer that works in our multi-task setup.
-    Really the main thing that makes this task not fit into our
-    existing trainer is the multiple datasets.
-    """
-    # def __init__(self,
-    #              model: Model,
-    #              serialization_dir: str,
-    #              iterator: DataIterator,
-    #              mingler: DatasetMingler,
-    #              optimizer: torch.optim.Optimizer,
-    #              datasets: Dict[str, Iterable[Instance]],
-    #              num_epochs: int = 10,
-    #              num_serialized_models_to_keep: int = 10) -> None:
-    #     super().__init__(serialization_dir)
-    #     self.model = model
-    #     self.iterator = iterator
-    #     self.mingler = mingler
-    #     self.optimizer = optimizer
-    #     self.datasets = datasets
-    #     self.num_epochs = num_epochs
-    #     self.checkpointer = Checkpointer(serialization_dir,
-    #                                      num_serialized_models_to_keep=num_serialized_models_to_keep)
-    #
-    # def save_checkpoint(self, epoch: int) -> None:
-    #     training_state = {"epoch": epoch, "optimizer": self.optimizer.state_dict()}
-    #     self.checkpointer.save_checkpoint(epoch, self.model.state_dict(), training_state, True)
-    #
-    # def restore_checkpoint(self) -> int:
-    #     model_state, trainer_state = self.checkpointer.restore_checkpoint()
-    #     if not model_state and not trainer_state:
-    #         return 0
-    #     else:
-    #         self.model.load_state_dict(model_state)
-    #         self.optimizer.load_state_dict(trainer_state["optimizer"])
-    #         return trainer_state["epoch"] + 1
-    #
-    #
-    # def train(self) -> Dict:
-    #     start_epoch = self.restore_checkpoint()
-    #
-    #     self.model.train()
-    #     for epoch in range(start_epoch, self.num_epochs):
-    #         total_loss = 0.0
-    #         batches = tqdm.tqdm(self.iterator(self.mingler.mingle(self.datasets), num_epochs=1))
-    #         for i, batch in enumerate(batches):
-    #             self.optimizer.zero_grad()
-    #             loss = self.model.forward(**batch)['loss']
-    #             loss.backward()
-    #             total_loss += loss.item()
-    #             self.optimizer.step()
-    #             batches.set_description(f"epoch: {epoch} loss: {total_loss / (i + 1)}")
-    #
-    #         # Save checkpoint
-    #         self.save_checkpoint(epoch)
-    #
-    #     return {}
-
-    # @classmethod
-    # def from_params(cls,   # type: ignore
-    #                 params: Params,
-    #                 serialization_dir: str,
-    #                 recover: bool = False) -> 'MultiTaskTrainer':
-    #    readers = {name: DatasetReader.from_params(reader_params)
-    #               for name, reader_params in params.pop("train_dataset_readers").items()}
-    #     train_file_paths = params.pop("train_file_paths").as_dict()
-    #
-    #     datasets = {name: reader.read(train_file_paths[name])
-    #                 for name, reader in readers.items()}
-    #
-    #     instances = (instance for dataset in datasets.values() for instance in dataset)
-    #     vocab = Vocabulary.from_params(Params({}), instances)
-    #     model = Model.from_params(params.pop('model'), vocab=vocab)
-    #     iterator = DataIterator.from_params(params.pop('iterator'))
-    #     iterator.index_with(vocab)
-    #     mingler = DatasetMingler.from_params(params.pop('mingler'))
-    #
-    #     parameters = [[n, p] for n, p in model.named_parameters() if p.requires_grad]
-    #     optimizer = Optimizer.from_params(parameters, params.pop('optimizer'))
-    #
-    #     num_epochs = params.pop_int("num_epochs", 10)
-    #
-    #     _ = params.pop("trainer", Params({}))
-    #
-    #     params.assert_empty(__name__)
-    #
-    #     return MultiTaskTrainer(model, serialization_dir, iterator, mingler, optimizer, datasets, num_epochs)

@@ -18,18 +18,19 @@ def process_query(query: JsonDict, output_dir: str, doctype: str = 'trec') -> No
                     fp.write(f'{doc_id}\t{score}\n')
 
 if __name__ == '__main__':
-    if len(sys.argv) != 5:
+    if len(sys.argv) != 4:
         print('Usage:\npython commands/json_to_trec.py [input_file].json [scoring_file].json [output_dir] [doctype]')
         sys.exit()
 
-    _, input_file, scoring_file, output_dir, doctype = sys.argv
+    #_, input_file, scoring_file, output_dir, doctype = sys.argv
+    _, input_file, output_dir, doctype = sys.argv
 
     with open(input_file) as fp:
         for line in fp:
             query = json.loads(line)
             process_query(query, output_dir, doctype)
 
-    with open(scoring_file) as fp:
-        for line in fp:
-            query = json.loads(line)
-            process_query(query, output_dir, doctype)
+    # with open(scoring_file) as fp:
+    #     for line in fp:
+    #         query = json.loads(line)
+    #         process_query(query, output_dir, doctype)

@@ -35,7 +35,6 @@ class RoundRobinMingler(DatasetMingler):
                     try:
                         for _ in range(self.take_at_a_time):
                             instance = next(iterator)
-                            instance.fields[self.dataset_name_field] = MetadataField(name)
                             yield instance
                     except StopIteration:
                         done.add(name)
