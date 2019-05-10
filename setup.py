@@ -19,7 +19,8 @@ setup(
         'neuclir.training', 'neuclir.training'],
     license='Academic License',
     install_requires=[
-        'allennlp>=0.7.1'
+        'allennlp>=0.7.1',
+        'PyYAML<=3.13,>=3.10'
     ],
     long_description=open('README.md').read(),
     entry_points={
