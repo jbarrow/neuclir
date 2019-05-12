@@ -20,7 +20,8 @@ setup(
     license='Academic License',
     install_requires=[
         'allennlp>=0.7.1',
-        'PyYAML<=3.13,>=3.10'
+        'PyYAML<=3.13,>=3.10',
+        'jsonschema~=2.6'
     ],
     long_description=open('README.md').read(),
     entry_points={

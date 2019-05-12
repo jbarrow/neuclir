@@ -125,7 +125,10 @@ class LeToRSentenceWrapper(Model):
         # (batch_size * num_docs, query_length, embedding_dim)
         qs_embedded = qs_embedded.view(batch_size*num_docs, query_length, embedding_dim)
 
-        logits = self.scorer(qs_embedded, ds_embedded, qs_mask, ss_mask, ds_mask).view(batch_size, num_docs)
+        scorer_output = self.scorer(qs_embedded, ds_embedded, qs_mask, ss_mask, ds_mask)
+        logits = scorer_output['score'].view(batch_size, num_docs)
+
+        #print(scorer_output['attentional_weights'].shape)
 
         output_dict = {'logits': logits}
 

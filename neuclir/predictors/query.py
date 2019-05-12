@@ -32,10 +32,10 @@ class QueryPredictor(Predictor):
         }
 
     def _json_to_instance(self, json_dict: JsonDict) -> Instance:
-        docs = [d.split('</s>') for d in json_dict['documents']]
+        docs = [d.replace('</s>', '') for d in json_dict['documents']]
         return self._dataset_reader.line_to_instance(
             tokenize(json_dict['query']),
-            [[tokenize(s.strip()) for s in sentences] for sentences in docs],
+            [tokenize(sentences) for sentences in docs],
             scores=np.array(json_dict['scores'])
         )
 

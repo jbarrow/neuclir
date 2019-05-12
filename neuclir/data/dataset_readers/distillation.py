@@ -58,7 +58,7 @@ class DistillationDatasetReader(DatasetReader):
                 docs = line.get('docs', line.get('documents'))
                 instance = self.line_to_instance(
                     tokenize(line['query']),
-                    [tokenize(d) for d in docs],
+                    [tokenize(d.replace('</s>', '')) for d in docs],
                     scores = np.array(line['scores']),
                     relevant_ix=line.get('relevant_ix', None),
                     dataset=dataset

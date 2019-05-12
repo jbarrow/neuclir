@@ -79,10 +79,10 @@ class LeToRWrapper(Model):
         p = F.log_softmax(y / self.temperature, dim=1)
         q = F.softmax(teacher_scores / self.temperature, dim=1)
 
-        if not self.training:
-            print('TARGET:', q)
-            print('INPUTS:', y)
-            print('OUTPUT:', p)
+        # if not self.training:
+        #     print('TARGET:', q)
+        #     print('INPUTS:', y)
+        #     print('OUTPUT:', p)
 
         l_kl = self.kl_loss(p, q) * self.temperature * self.temperature
         l_ce = 1.
